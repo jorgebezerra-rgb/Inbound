@@ -149,7 +149,7 @@ atingimento = (produzido / projecao) * 100 if projecao else 0
 
 if atingimento >= 100:
     st.balloons()
-    tocar_audio("som_meta_batida.mp3")
+    # tocar_audio("som_meta_batida.mp3")
 
 col1, col2, col3 = st.columns(3)
 col1.metric("Produzido (Total)", f"{produzido or 0:,.0f}".replace(",", "."))
@@ -194,4 +194,5 @@ with col_barras:
         grafico_combinado = alt.layer(barras, linha, texto_barras)
         st.altair_chart(grafico_combinado, use_container_width=True)
     else:
+
         st.warning("Não há dados para exibir no gráfico.")
