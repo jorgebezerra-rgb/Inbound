@@ -35,8 +35,7 @@ def tocar_audio(caminho_arquivo):
     except FileNotFoundError:
         st.warning(f"Arquivo de áudio '{caminho_arquivo}' não encontrado. Coloque-o na mesma pasta do script.")
 
-# --- NOVO: Função para gerar um gráfico de medidor (velocímetro) com HTML/SVG ---
-# --- VERSÃO FINAL CORRIGIDA: Função para gerar um gráfico de medidor com faixas de cor precisas ---
+# --- Função para gerar um gráfico de medidor (velocímetro) ---
 def gerar_grafico_medidor(valor, meta, altura=200):
     """
     Gera o código HTML/SVG para um gráfico de medidor com faixas de cor precisas e limite de 150%.
@@ -46,59 +45,47 @@ def gerar_grafico_medidor(valor, meta, altura=200):
     else:
         percentual = (valor / meta) * 100
 
-    # O arco total de 180 graus representa a escala de 0% a 150%.
-    # Cada 1% corresponde a 1.2 graus (180 / 150).
     angulo_ponteiro = -90 + (min(percentual, 150) * 1.2)
 
-    # Cores das faixas e do ponteiro
-    COR_VERMELHO = "#DC143C"  # 0-40%
-    COR_LARANJA = "#FFBF00"   # 40-90%
-    COR_VERDE = "#31859c"     # 90-150%
-    COR_PONTEIRO = "white"
+    # Cores ATUALIZADAS para o tema escuro
+    COR_VERMELHO = "#DC143C"
+    COR_LARANJA = "#FFBF00"
+    COR_VERDE = "#31859c"
+    COR_PONTEIRO = "#ffffff"
 
-    # Define a cor do texto do percentual baseado na faixa atual
     cor_valor_atual = COR_VERMELHO
     if percentual > 40 and percentual <= 90:
         cor_valor_atual = COR_LARANJA
     elif percentual > 90:
         cor_valor_atual = COR_VERDE
 
-    # --- Lógica de Desenho dos Arcos ---
     RAIO = 80
     LARGURA_TRACO = 25
-    PERIMETRO_TOTAL_ARCO = 3.14159 * RAIO # Comprimento total do arco de 180 graus
+    PERIMETRO_TOTAL_ARCO = 3.14159 * RAIO
 
-    # Comprimento de cada segmento de cor no arco
     comprimento_vermelho = PERIMETRO_TOTAL_ARCO * (40 / 150)
     comprimento_laranja = PERIMETRO_TOTAL_ARCO * ((90 - 40) / 150)
     comprimento_verde = PERIMETRO_TOTAL_ARCO * ((150 - 90) / 150)
 
-    # Offset (deslocamento) para posicionar cada segmento
     offset_laranja = -comprimento_vermelho
     offset_verde = -(comprimento_vermelho + comprimento_laranja)
 
     html = f"""
     <div style="display: flex; flex-direction: column; align-items: center; font-family: sans-serif; height: {altura}px;">
         <svg viewBox="0 0 200 120" style="width: 100%; height: auto; overflow: visible;">
-            
             <path d="M 20 100 A {RAIO} {RAIO} 0 0 1 180 100" fill="none" stroke="{COR_VERMELHO}" stroke-width="{LARGURA_TRACO}"
                   stroke-dasharray="{comprimento_vermelho} {PERIMETRO_TOTAL_ARCO}" />
-
             <path d="M 20 100 A {RAIO} {RAIO} 0 0 1 180 100" fill="none" stroke="{COR_LARANJA}" stroke-width="{LARGURA_TRACO}"
                   stroke-dasharray="{comprimento_laranja} {PERIMETRO_TOTAL_ARCO}" stroke-dashoffset="{offset_laranja}" />
-
             <path d="M 20 100 A {RAIO} {RAIO} 0 0 1 180 100" fill="none" stroke="{COR_VERDE}" stroke-width="{LARGURA_TRACO}"
                   stroke-dasharray="{comprimento_verde} {PERIMETRO_TOTAL_ARCO}" stroke-dashoffset="{offset_verde}" />
-
             <g transform="translate(100, 100)">
                 <line x1="0" y1="0" x2="0" y2="-65" stroke="{COR_PONTEIRO}" stroke-width="4" transform="rotate({angulo_ponteiro} 0 0)" />
                 <circle cx="0" cy="0" r="8" fill="{COR_PONTEIRO}" />
                 <circle cx="0" cy="0" r="4" fill="white" />
             </g>
-
             <text x="20" y="115" font-size="14" fill="#666" text-anchor="start">0%</text>
             <text x="180" y="115" font-size="14" fill="#666" text-anchor="end">150%</text>
-
         </svg>
         <div style="font-size: 28px; font-weight: bold; text-align: center; margin-top: -85px; color: {cor_valor_atual};">
             {percentual:.1f}%
@@ -145,6 +132,8 @@ st.markdown("""<style>
 produzido, projecao, df = carregar_dados()
 
 st.header("Resumo do Dia")
+st.divider()
+
 atingimento = (produzido / projecao) * 100 if projecao else 0
 
 if atingimento >= 100:
@@ -156,28 +145,52 @@ col1.metric("Produzido (Total)", f"{produzido or 0:,.0f}".replace(",", "."))
 col2.metric("Projeção", f"{projecao or 0:,.0f}".replace(",", "."))
 col3.metric("Atingimento da Projeção", f"{atingimento:.2f} %")
 
+st.divider()
 
 # --- Layout dos Gráficos ---
 col_medidor, col_barras = st.columns([1, 3])
 
 with col_medidor:
-    st.subheader("Atingimento da Projeção")
-    # Chama a NOVA função do medidor
+    st.markdown("<h3 style='text-align: center;'>Atingimento da Projeção</h3>", unsafe_allow_html=True)
     html_medidor = gerar_grafico_medidor(produzido, projecao)
     st.components.v1.html(html_medidor, height=250)
 
 
 with col_barras:
+    st.markdown("<h3 style='text-align: center;'>Produção por Hora</h3>", unsafe_allow_html=True)
     if not df.empty:
         base = alt.Chart(df).encode(
-            x=alt.X('Horas:O', title='Horas do Dia', axis=alt.Axis(labelAngle=0, labelFontSize=15))
+            x=alt.X('Horas:O',
+                    title='Horas do Dia',
+                    axis=alt.Axis(
+                        labelAngle=0,
+                        labelFontSize=15,
+                        titleFontSize=16,
+                        domain=False,
+                        ticks=False,
+                        labelColor='white',
+                        titleColor='white'
+                    ))
         ).properties(height=400)
 
-        barras = base.mark_bar(size=80, # Aumenta a largura da barra
-                               cornerRadiusTopLeft=10, # Adiciona borda arredondada no canto superior esquerdo
-                                cornerRadiusTopRight=10 # Adiciona borda arredondada no canto superior direito
-                               ).encode(
-            y=alt.Y('Produção Hora:Q', title='Quantidade Produzida'),
+        barras = base.mark_bar(
+            size=60,
+            cornerRadiusTopLeft=8,
+            cornerRadiusTopRight=8
+        ).encode(
+            y=alt.Y('Produção Hora:Q',
+                    title='Quantidade Produzida',
+                    axis=alt.Axis(
+                        grid=True,
+                        gridColor='#2e2f37',
+                        gridDash=[1, 5],
+                        domain=False,
+                        ticks=False,
+                        labelFontSize=14,
+                        titleFontSize=16,
+                        labelColor='white',
+                        titleColor='white'
+                    )),
             tooltip=['Horas', 'Produção Hora', 'Meta Hora'],
             color=alt.condition(
                 alt.datum['Produção Hora'] >= alt.datum['Meta Hora'],
@@ -185,19 +198,28 @@ with col_barras:
                 alt.value('#DC143C')
             )
         )
-        linha = base.mark_line(color='#9bbb59', # Cor da linha
-                               strokeWidth=5, # Grossura da linha
-                               interpolate='monotone' # Linha suave e curva
-                               ).encode(
+
+        linha = base.mark_line(
+            color='#9bbb59',
+            strokeWidth=5,
+            interpolate='monotone'
+        ).encode(
             y=alt.Y('Meta Hora:Q', title=''),
             tooltip=['Horas', 'Produção Hora', 'Meta Hora']
         )
+        
         texto_barras = barras.mark_text(
-            align='center', baseline='top', dy=-15, fontSize=15
+            align='center', baseline='middle', dy=-15, fontSize=15, fontWeight='bold'
         ).encode(text='Produção Hora:Q', color=alt.value('white'))
 
+        grafico_combinado = (alt.layer(barras, linha, texto_barras)
+                             .configure_view(
+                                 stroke=None
+                             ).configure_axis(
+                                 labelFont='sans-serif',
+                                 titleFont='sans-serif'
+                             ))
 
-        grafico_combinado = alt.layer(barras, linha, texto_barras)
         st.altair_chart(grafico_combinado, use_container_width=True)
     else:
         st.warning("Não há dados para exibir no gráfico.")
