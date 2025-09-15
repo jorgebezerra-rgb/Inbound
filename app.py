@@ -53,7 +53,7 @@ def gerar_grafico_medidor(valor, meta, altura=200):
     # Cores das faixas e do ponteiro
     COR_VERMELHO = "#DC143C"  # 0-40%
     COR_LARANJA = "#FFBF00"   # 40-90%
-    COR_VERDE = "#2E8B57"     # 90-150%
+    COR_VERDE = "#31859c"     # 90-150%
     COR_PONTEIRO = "white"
 
     # Define a cor do texto do percentual baseado na faixa atual
@@ -173,7 +173,10 @@ with col_barras:
             x=alt.X('Horas:O', title='Horas do Dia', axis=alt.Axis(labelAngle=0, labelFontSize=15))
         ).properties(height=400)
 
-        barras = base.mark_bar(size=30).encode(
+        barras = base.mark_bar(size=80, # Aumenta a largura da barra
+                               cornerRadiusTopLeft=10, # Adiciona borda arredondada no canto superior esquerdo
+                                cornerRadiusTopRight=10 # Adiciona borda arredondada no canto superior direito
+                               ).encode(
             y=alt.Y('Produção Hora:Q', title='Quantidade Produzida'),
             tooltip=['Horas', 'Produção Hora', 'Meta Hora'],
             color=alt.condition(
@@ -182,18 +185,19 @@ with col_barras:
                 alt.value('#DC143C')
             )
         )
-        linha = base.mark_line(color='#9bbb59', strokeWidth=3).encode(
+        linha = base.mark_line(color='#9bbb59', # Cor da linha
+                               strokeWidth=5, # Grossura da linha
+                               interpolate='monotone' # Linha suave e curva
+                               ).encode(
             y=alt.Y('Meta Hora:Q', title=''),
             tooltip=['Horas', 'Produção Hora', 'Meta Hora']
         )
         texto_barras = barras.mark_text(
-            align='center', baseline='top', dy=15, fontSize=15
+            align='center', baseline='top', dy=-15, fontSize=15
         ).encode(text='Produção Hora:Q', color=alt.value('white'))
 
 
         grafico_combinado = alt.layer(barras, linha, texto_barras)
         st.altair_chart(grafico_combinado, use_container_width=True)
     else:
-
         st.warning("Não há dados para exibir no gráfico.")
-
