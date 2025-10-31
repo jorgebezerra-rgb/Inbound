@@ -1,225 +1,331 @@
 import streamlit as st
 import pandas as pd
-import altair as alt
-from streamlit_autorefresh import st_autorefresh
-import base64
-import io
+import plotly.graph_objects as go
+import plotly.express as px  # Importar para o gráfico da nova aba
 
-# --- Configuração da Página ---
+# 🔧 CONFIGURAÇÕES GLOBAIS
 st.set_page_config(
-    page_title="Black Friday - Inbound",
-    page_icon="📊",
-    layout="wide"
+    page_title="Dashboard de Desempenho",
+    layout="wide",
+    initial_sidebar_state="collapsed"
 )
 
-#--- Faz a pagina atualizar a cada 5 minutos
-st_autorefresh(interval=300 * 1000, key='data_refresh')
+# URL da planilha publicada
+url_csv = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQc7pTiScl6n_M9hRk1xrTBPUVdG6jtErnsS3skoZiC-49NdFyQd5D3877D3M4wM8kXf27gZvCjY5vo/pub?gid=390048025&single=true&output=csv"
 
 
-# --- Função para tocar o áudio A PARTIR DE UM ARQUIVO ---
-def tocar_audio(caminho_arquivo):
-    """Lê um arquivo de áudio local, converte para Base64 e o toca no Streamlit."""
+@st.cache_data(ttl=600)
+def carregar_dados(url_csv):
     try:
-        with open(caminho_arquivo, "rb") as f:
-            data = f.read()
-            b64 = base64.b64encode(data).decode()
-            md = f"""
-                <audio autoplay="true">
-                <source src="data:audio/mp3;base64,{b64}" type="audio/mp3">
-                </audio>
-                """
-            st.markdown(
-                md,
-                unsafe_allow_html=True,
-            )
-    except FileNotFoundError:
-        st.warning(f"Arquivo de áudio '{caminho_arquivo}' não encontrado. Coloque-o na mesma pasta do script.")
+        df = pd.read_csv(url_csv, thousands='.')
 
-# --- Função para gerar um gráfico de medidor (velocímetro) ---
-def gerar_grafico_medidor(valor, meta, altura=200):
-    """
-    Gera o código HTML/SVG para um gráfico de medidor com faixas de cor precisas e limite de 150%.
-    """
-    if meta is None or meta == 0:
-        percentual = 0
-    else:
-        percentual = (valor / meta) * 100
+        # Limpeza e conversão
+        colunas_numericas = [
+            'Meta Planejada', 'Meta Acumulada', 'Realizado Hora',
+            'Realizado Acumulado', 'Tendência', 'Dentro', 'Fora',
+            'Dentro Acumulado', 'Fora Acumulado'
+        ]
+        for col in colunas_numericas:
+            if col in df.columns:
+                df[col] = pd.to_numeric(
+                    df[col].astype(str).str.replace('None', '', regex=False),
+                    errors='coerce'
+                )
 
-    angulo_ponteiro = -90 + (min(percentual, 150) * 1.2)
+        df = df.dropna(subset=['Hora'])
+        df['Hora'] = df['Hora'].astype(int)
+        df = df.sort_values(by='Hora')
 
-    # Cores ATUALIZADAS para o tema escuro
-    COR_VERMELHO = "#DC143C"
-    COR_LARANJA = "#FFBF00"
-    COR_VERDE = "#31859c"
-    COR_PONTEIRO = "#ffffff"
+        # Substitui todos os NaN por vazio
+        df = df.fillna('')
 
-    cor_valor_atual = COR_VERMELHO
-    if percentual > 40 and percentual <= 90:
-        cor_valor_atual = COR_LARANJA
-    elif percentual > 90:
-        cor_valor_atual = COR_VERDE
-
-    RAIO = 80
-    LARGURA_TRACO = 25
-    PERIMETRO_TOTAL_ARCO = 3.14159 * RAIO
-
-    comprimento_vermelho = PERIMETRO_TOTAL_ARCO * (40 / 150)
-    comprimento_laranja = PERIMETRO_TOTAL_ARCO * ((90 - 40) / 150)
-    comprimento_verde = PERIMETRO_TOTAL_ARCO * ((150 - 90) / 150)
-
-    offset_laranja = -comprimento_vermelho
-    offset_verde = -(comprimento_vermelho + comprimento_laranja)
-
-    html = f"""
-    <div style="display: flex; flex-direction: column; align-items: center; font-family: sans-serif; height: {altura}px;">
-        <svg viewBox="0 0 200 120" style="width: 100%; height: auto; overflow: visible;">
-            <path d="M 20 100 A {RAIO} {RAIO} 0 0 1 180 100" fill="none" stroke="{COR_VERMELHO}" stroke-width="{LARGURA_TRACO}"
-                  stroke-dasharray="{comprimento_vermelho} {PERIMETRO_TOTAL_ARCO}" />
-            <path d="M 20 100 A {RAIO} {RAIO} 0 0 1 180 100" fill="none" stroke="{COR_LARANJA}" stroke-width="{LARGURA_TRACO}"
-                  stroke-dasharray="{comprimento_laranja} {PERIMETRO_TOTAL_ARCO}" stroke-dashoffset="{offset_laranja}" />
-            <path d="M 20 100 A {RAIO} {RAIO} 0 0 1 180 100" fill="none" stroke="{COR_VERDE}" stroke-width="{LARGURA_TRACO}"
-                  stroke-dasharray="{comprimento_verde} {PERIMETRO_TOTAL_ARCO}" stroke-dashoffset="{offset_verde}" />
-            <g transform="translate(100, 100)">
-                <line x1="0" y1="0" x2="0" y2="-65" stroke="{COR_PONTEIRO}" stroke-width="4" transform="rotate({angulo_ponteiro} 0 0)" />
-                <circle cx="0" cy="0" r="8" fill="{COR_PONTEIRO}" />
-                <circle cx="0" cy="0" r="4" fill="white" />
-            </g>
-            <text x="20" y="115" font-size="14" fill="#666" text-anchor="start">0%</text>
-            <text x="180" y="115" font-size="14" fill="#666" text-anchor="end">150%</text>
-        </svg>
-        <div style="font-size: 28px; font-weight: bold; text-align: center; margin-top: -85px; color: {cor_valor_atual};">
-            {percentual:.1f}%
-        </div>
-        <div style="font-size: 16px; text-align: center; color: #666; margin-top: 30px;">
-            Atingimento
-        </div>
-    </div>
-    """
-    return html
-
-
-
-# --- Carregamento e Tratamento dos Dados ---
-def carregar_dados():
-    url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSbPgQ6euKLUaDZzAYKEZ-prfTh3V0Pj1skjdqssT1P6wZuQudV2ey0RhCkHYpR7DX322Hqth6ZyHOT/pub?gid=0&single=true&output=csv"
-    try:
-        df_completo = pd.read_csv(url, thousands='.')
-        df_grafico = df_completo[['Horas', 'Meta Hora', 'Produção Hora']].head(10).copy()
-        for coluna in ['Horas', 'Meta Hora', 'Produção Hora']:
-            df_grafico[coluna] = pd.to_numeric(df_grafico[coluna], errors='coerce')
-        df_grafico.fillna(0, inplace=True)
-        df_grafico = df_grafico.astype(int)
-        produzido_total = df_grafico['Produção Hora'].sum()
-        projecao_final = pd.to_numeric(df_completo['Projeção '].dropna().iloc[-1], errors='coerce')
-        return produzido_total, projecao_final, df_grafico
+        return df
     except Exception as e:
-        st.error(f"Não foi possível carregar os dados da planilha. Erro: {e}")
-        return 0, 0, pd.DataFrame()
+        st.error(f"Erro ao carregar os dados: {e}")
+        return pd.DataFrame()
 
 
-# --- Interface do Dashboard ---
-col1, col2 = st.columns([1, 5])
-with col1:
-    st.image("dafiti.gif", width=120)
-with col2:
-    st.title("Black Friday - Inbound")
+def gerar_grafico_acumulado(df, area):
+    """Função que cria o gráfico de barras/linhas (seu código)."""
+    if df.empty:
+        st.warning(f"Nenhum dado disponível para {area}.")
+        return
 
-st.markdown("""<style>
-[data-testid="stMetricValue"] { font-size: 50px; }
-[data-testid="stMetricLabel"] { font-size: 20px; }
-</style>""", unsafe_allow_html=True)
+    # --- Cores dinâmicas ---
+    cores = [
+        "#46bdc6" if (str(r).strip() != '' and str(d).strip() != '' and float(r) >= float(d))
+        else "#FF4C4C"
+        for r, d in zip(df["Realizado Acumulado"], df["Dentro Acumulado"])
+    ]
 
-produzido, projecao, df = carregar_dados()
+    fig = go.Figure()
 
-st.header("Resumo do Dia")
-st.divider()
-
-atingimento = (produzido / projecao) * 100 if projecao else 0
-
-if atingimento >= 100:
-    st.balloons()
-    tocar_audio("som_meta_batida.mp3")
-
-col1, col2, col3 = st.columns(3)
-col1.metric("Produzido (Total)", f"{produzido or 0:,.0f}".replace(",", "."))
-col2.metric("Projeção", f"{projecao or 0:,.0f}".replace(",", "."))
-col3.metric("Atingimento da Projeção", f"{atingimento:.2f} %")
-
-st.divider()
-
-# --- Layout dos Gráficos ---
-col_medidor, col_barras = st.columns([1, 3])
-
-with col_medidor:
-    st.markdown("<h3 style='text-align: center;'>Atingimento da Projeção</h3>", unsafe_allow_html=True)
-    html_medidor = gerar_grafico_medidor(produzido, projecao)
-    st.components.v1.html(html_medidor, height=250)
-
-
-with col_barras:
-    st.markdown("<h3 style='text-align: center;'>Produção por Hora</h3>", unsafe_allow_html=True)
-    if not df.empty:
-        base = alt.Chart(df).encode(
-            x=alt.X('Horas:O',
-                    title='Horas do Dia',
-                    axis=alt.Axis(
-                        labelAngle=0,
-                        labelFontSize=15,
-                        titleFontSize=16,
-                        domain=False,
-                        ticks=False,
-                        labelColor='white',
-                        titleColor='white'
-                    ))
-        ).properties(height=400)
-
-        barras = base.mark_bar(
-            size=60,
-            cornerRadiusTopLeft=8,
-            cornerRadiusTopRight=8
-        ).encode(
-            y=alt.Y('Produção Hora:Q',
-                    title='Quantidade Produzida',
-                    axis=alt.Axis(
-                        grid=True,
-                        gridColor='#2e2f37',
-                        gridDash=[1, 5],
-                        domain=False,
-                        ticks=False,
-                        labelFontSize=14,
-                        titleFontSize=16,
-                        labelColor='white',
-                        titleColor='white'
-                    )),
-            tooltip=['Horas', 'Produção Hora', 'Meta Hora'],
-            color=alt.condition(
-                alt.datum['Produção Hora'] >= alt.datum['Meta Hora'],
-                alt.value('#31859c'),
-                alt.value('#DC143C')
-            )
-        )
-
-        linha = base.mark_line(
-            color='#9bbb59',
-            strokeWidth=5,
-            interpolate='monotone'
-        ).encode(
-            y=alt.Y('Meta Hora:Q', title=''),
-            tooltip=['Horas', 'Produção Hora', 'Meta Hora']
-        )
+    # --- BARRAS ---
+    fig.add_trace(go.Bar(
+        x=df['Hora'],
+        y=df['Realizado Acumulado'],
+        name='Realizado Acumulado',
         
-        texto_barras = barras.mark_text(
-            align='center', baseline='middle', dy=-15, fontSize=15, fontWeight='bold'
-        ).encode(text='Produção Hora:Q', color=alt.value('white'))
+        # --- MUDANÇA AQUI ---
+        # Trocamos 'marker_color=cores' por 'marker=dict(...)'
+        marker=dict(
+            color=cores,
+            cornerradius=5  # <-- Define o arredondamento
+        ),
+        # --------------------
+        
+        text=df['Realizado Acumulado'],
+        texttemplate='%{text:.0f}',
+        textposition='outside',
+        textfont=dict(size=14, color='white', family='Arial'),
+        textangle=-90,  # Ângulo do texto
+        width=0.8
+    ))
 
-        grafico_combinado = (alt.layer(barras, linha, texto_barras)
-                             .configure_view(
-                                 stroke=None
-                             ).configure_axis(
-                                 labelFont='sans-serif',
-                                 titleFont='sans-serif'
-                             ))
+    # --- LINHA META ---
+    fig.add_trace(go.Scatter(
+        x=df['Hora'],
+        y=df['Meta Acumulada'],
+        name='Meta',
+        mode='lines',
+        line=dict(color='lime', dash='dash', width=3, shape='spline'),
+        marker=dict(size=6)
+    ))
 
-        st.altair_chart(grafico_combinado, use_container_width=True)
-    else:
-        st.warning("Não há dados para exibir no gráfico.")
+    # --- LINHA TENDÊNCIA ---
+    fig.add_trace(go.Scatter(
+        x=df['Hora'],
+        y=df['Tendência'],
+        name='Tendência',
+        mode='lines',
+        line=dict(color='orange', dash='dot',  width=3, shape='spline')
+    ))
+
+    # --- EIXOS ---
+    fig.update_xaxes(
+        type='category',
+        showgrid=False,
+        title_text='Hora',
+        tickfont=dict(size=12, color='white'),
+        title_font=dict(size=13, color='white')
+    )
+    
+    # (Mantém a remoção do eixo Y que fizemos antes)
+    fig.update_yaxes(
+        showgrid=False,
+        showticklabels=False,
+        title_text=None,
+    )
+
+    # --- LAYOUT ---
+    fig.update_layout(
+        title_text=f'{area.upper()}',
+        title_x=0,
+        title_y=0.97,
+        title_font=dict(size=14, color='orange', family='Arial Black'),
+        font=dict(size=13, color='white', family='Arial'),
+        plot_bgcolor='#0E1117',
+        paper_bgcolor='#0E1117',
+        barmode='overlay',
+        margin=dict(l=40, r=20, t=60, b=40),
+        uniformtext=dict(minsize=13, mode='show'),
+        showlegend=False
+    )
+    
+    st.plotly_chart(fig, use_container_width=True, theme=None, key=f"acumulado_chart_{area}")
+
+
+# (Cole esta função no lugar da sua 'grafico_hora_a_hora' antiga)
+# (Cole esta função no lugar da sua 'grafico_hora_a_hora' antiga)
+def grafico_hora_a_hora(df, area):
+    # 1. Lógica de Cores
+    cores_hora = []
+    for r, m in zip(df["Realizado Hora"], df["Meta Planejada"]):
+        if (str(r).strip() != '' and str(m).strip() != ''):
+            if float(r) >= float(m):
+                cores_hora.append("#46bdc6") # Verde/Ciano
+            else:
+                cores_hora.append("#FF4C4C") # Vermelho
+        else:
+            cores_hora.append("#888888") # Cor neutra
+
+    # 2. Criar a Figura
+    fig_hora = go.Figure()
+
+    # 3. Adicionar Barras (Realizado Hora)
+    fig_hora.add_trace(go.Bar(
+        x=df['Hora'],
+        y=df['Realizado Hora'],
+        name='Realizado Hora',
+        marker=dict(
+            color=cores_hora,
+            cornerradius=8 
+        ),
+        text=df['Realizado Hora'],
+        texttemplate='%{text:.0f}',
+        textposition='outside',
+        textangle=-90,
+        textfont=dict(size=13, color='white', family='Arial') 
+    ))
+
+    # 4. Adicionar Linha (Meta Planejada)
+    fig_hora.add_trace(go.Scatter(
+        x=df['Hora'],
+        y=df['Meta Planejada'],
+        name='Meta Planejada',
+        mode='lines',
+        line=dict(color='lime', width=3, shape='spline'),
+        line_shape='spline' 
+    ))
+
+    # --- MUDANÇA (A): CÁLCULO DO EIXO DINÂMICO ---
+    # Precisamos converter de volta para numérico, pois o carregar_dados()
+    # pode ter transformado 'NaN' em ''
+    y_realizado = pd.to_numeric(df['Realizado Hora'], errors='coerce')
+    y_meta = pd.to_numeric(df['Meta Planejada'], errors='coerce')
+
+    # Pega o valor máximo das duas colunas, tratando valores vazios
+    max_realizado = y_realizado.max()
+    max_meta = y_meta.max()
+
+    # Define max_val como 0 se ambas as colunas estiverem vazias ou só tiverem NaN
+    if pd.isna(max_realizado): max_realizado = 0
+    if pd.isna(max_meta): max_meta = 0
+    
+    max_val = max(max_realizado, max_meta)
+
+    # Define o limite superior (o "respiro" que você pediu)
+    # Adicionei 1500 para garantir um bom espaço, mas pode ser 1000
+    limite_superior = max_val + 1500 
+    # -----------------------------------------------
+
+    # 5. Configurar Layout
+    fig_hora.update_layout(
+        title_text=area.upper(),
+        title_x=0,
+        title_font=dict(size=14, color='orange', family='Arial Black'),
+        font=dict(size=13, color='white', family='Arial'),
+        plot_bgcolor='#0E1117',
+        paper_bgcolor='#0E1117',
+        barmode='overlay',
+        margin=dict(l=40, r=20, t=60, b=40),
+        uniformtext=dict(minsize=13, mode='show'), 
+        showlegend=False,
+        legend=dict(font=dict(color='white'))
+    )
+    
+    # 6. Eixos
+    fig_hora.update_xaxes(
+        type='category',
+        showgrid=False,
+        title_text='Hora'
+    )
+    
+    # --- MUDANÇA (B): APLICANDO O EIXO DINÂMICO ---
+    fig_hora.update_yaxes(
+        showgrid=False,
+        showticklabels=False,
+        title_text=None,
+        range=[0, limite_superior]  # <-- Define o range máximo dinamicamente
+    )
+    # ---------------------------------------------
+
+    # 7. Mostrar o Gráfico
+    st.plotly_chart(fig_hora, use_container_width=True, theme=None, key=f"hora_chart_{area}")
+
+# --- INÍCIO DA APLICAÇÃO ---
+
+# 1. Carrega os dados UMA VEZ
+df = carregar_dados(url_csv)
+
+# 2. Cria as Abas (Tabs)
+tab1, tab2 = st.tabs(["📊 Dashboard Acumulado", "📈 Dashboard Hora a Hora"])
+
+
+# 3. Conteúdo da Aba 1 (Seu dashboard principal)
+with tab1:
+    st.header("📊 Dashboard de Desempenho Acumulado")
+    st.markdown("### 🔹 Visão Geral das Áreas")
+
+    areas = {
+        'Packing AutoStore': df[df['Área'] == 'Packing Autostore'].copy(),
+        'Picking AutoStore': df[df['Área'] == 'Picking Autostore'].copy(),
+        'Shipping': df[df['Área'] == 'Shipping'].copy(),
+        'Packing MR': df[df['Área'] == 'Packing MR'].copy(),
+        'Consolidação MR': df[df['Área'] == 'Consolidação MR'].copy(),
+    }
+
+    # 🔹 Mostrar 3 gráficos por linha
+    with st.container():
+        area_items = list(areas.items())
+        for i in range(0, len(area_items), 3):  # grupos de 3
+            cols = st.columns(3)
+            for j, (nome_area, df_area) in enumerate(area_items[i:i+3]):
+                with cols[j]:
+                    
+                    # --- INÍCIO DA MUDANÇA (CARDS) ---
+                    
+                    # 1. Calcular os totais
+                    # Usamos pd.to_numeric para garantir que ' ' (fillna) virem NaN e sejam somados corretamente
+                    total_realizado = pd.to_numeric(df_area['Realizado Hora'], errors='coerce').sum()
+                    total_meta = pd.to_numeric(df_area['Meta Planejada'], errors='coerce').sum()
+
+                    desvio = total_realizado - total_meta
+
+                    if total_meta > 0:
+                        percentual = (desvio / total_meta)
+
+                        delta_formatado = f'{percentual:.1%}'
+                    else:
+                        delta_formatado = None
+
+                    # 2. Criar sub-colunas para os cards ficarem lado a lado
+                    col_met1, col_met2, col_met3 = st.columns(3)
+                    
+                    with col_met1:
+                        # Usamos :.0f para formatar sem casas decimais
+                        st.metric(
+                            label="Total Realizado (Hora)", 
+                            value=f"{total_realizado:.0f}"
+                        )
+                    with col_met2:
+                        st.metric(
+                            label="Total Meta (Hora)", 
+                            value=f"{total_meta:.0f}"
+                        )
+                    with col_met3:
+                        st.metric(
+                            label="Desvio",
+                            value=f"{desvio:.0f}",
+                            delta=delta_formatado
+                        )
+                    
+                    # --- FIM DA MUDANÇA ---
+
+                    # 3. Gerar o gráfico (como já estava)
+                    gerar_grafico_acumulado(df_area, nome_area)
+
+# 4. Conteúdo da Aba 2 (A nova página)
+with tab2:
+    # Header corrigido para a Aba 2
+    st.header("📊 Dashboard de Desempenho Hora a Hora")
+    st.markdown("### 🔹 Visão Geral das Áreas")
+
+    # Filtra os dados (exatamente como na Aba 1)
+    areas = {
+        'Packing AutoStore': df[df['Área'] == 'Packing Autostore'].copy(),
+        'Picking AutoStore': df[df['Área'] == 'Picking Autostore'].copy(),
+        'Shipping': df[df['Área'] == 'Shipping'].copy(),
+        'Packing MR': df[df['Área'] == 'Packing MR'].copy(),
+        'Consolidação MR': df[df['Área'] == 'Consolidação MR'].copy(),
+    }
+
+    # 🔹 Mostrar 3 gráficos por linha
+    with st.container():
+        area_items = list(areas.items())
+        for i in range(0, len(area_items), 3):  # grupos de 3
+            cols = st.columns(3)
+            for j, (nome_area, df_area) in enumerate(area_items[i:i+3]):
+                with cols[j]:
+                    # Chama a função correta
+                    grafico_hora_a_hora(df_area, nome_area)
